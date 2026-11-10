@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel de Consultas Médicas</title>
+<style>
+:root{--bg:#F2F8F7;--card:#fff;--ink:#12263A;--mute:#5B6B7A;--line:#D7E4E2;--teal:#0E7C7B;--amber:#E9A23B;--coral:#D1495B;--code:#12263A;--codeink:#DCE8EE}
+@media (prefers-color-scheme:dark){:root{--bg:#0C1A24;--card:#14293A;--ink:#E6F0F2;--mute:#93A8B5;--line:#24425A;--teal:#3FC1BE;--amber:#F0B65A;--coral:#EE6F80;--code:#0A141C}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;padding:16px}
+main{max-width:1000px;margin:0 auto}
+h1{font:700 24px/1.2 Georgia,"Times New Roman",serif;margin:4px 0}
+.sub{color:var(--mute);margin:0 0 14px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+select,button{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-width:100%}
+button{cursor:pointer}
+.live{color:var(--mute);font-size:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.k{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.k b{display:block;font:700 28px/1.1 Georgia,serif}
+.k span{color:var(--mute);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+h2{font-size:15px;margin:0 0 10px}
+.row{display:grid;grid-template-columns:110px 1fr 28px;gap:8px;align-items:center;margin:8px 0;font-size:13px}
+.track{background:var(--bg);border-radius:6px;height:16px;overflow:hidden}
+.fill{height:100%;background:var(--teal);border-radius:6px}
+.donut{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.leg div{display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0}
+.dot{width:12px;height:12px;border-radius:3px}
+.cols{display:flex;align-items:flex-end;gap:6px;height:130px}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;font-size:11px;color:var(--mute)}
+.col i{display:block;width:100%;background:var(--teal);border-radius:5px 5px 0 0;min-height:2px}
+.col em{font-style:normal;color:var(--ink);font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--mute);font-weight:600}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--teal);font-size:13px}
+pre{background:var(--code);color:var(--codeink);padding:10px;border-radius:8px;overflow-x:auto;font-size:12px;margin:8px 0 0}
+.full{grid-column:1/-1}
+.err{background:var(--card);border:1px solid var(--coral);border-radius:10px;padding:14px;color:var(--ink)}
+</style>
+</head>
+<body>
+<main>
+<h1>Painel de Consultas Médicas</h1>
+<p class="sub">Clínica de Chimoio, Manica. Dados em tempo real da base de dados MySQL no Railway.</p>
+<div class="bar">
+  <label for="f">Médico:</label><select id="f"><option value="0">Todos os médicos</option></select>
+  <button id="r" type="button">Atualizar</button>
+  <span class="live" id="live"></span>
+</div>
+<div id="erro"></div>
+<section class="kpis" id="kpis"></section>
+<section class="grid">
+  <div class="card"><h2>Consultas por especialidade</h2><div id="esp"></div>
+    <details><summary>SQL por trás deste gráfico</summary><pre>SELECT e.nome_especialidade, COUNT(c.id_consulta)
+FROM especialidade e
+LEFT JOIN medico m ON m.id_especialidade = e.id_especialidade
+LEFT JOIN consulta c ON c.id_medico = m.id_medico
+GROUP BY e.id_especialidade, e.nome_especialidade;</pre></details></div>
+  <div class="card"><h2>Consultas por estado</h2><div class="donut" id="est"></div>
+    <details><summary>SQL por trás deste gráfico</summary><pre>SELECT estado, COUNT(*) FROM consulta GROUP BY estado;</pre></details></div>
+  <div class="card full"><h2>Consultas por dia</h2><div class="cols" id="dia"></div>
+    <details><summary>SQL por trás deste gráfico</summary><pre>SELECT data_consulta, COUNT(*) AS total
+FROM consulta
+GROUP BY data_consulta ORDER BY data_consulta;</pre></details></div>
+  <div class="card full"><h2>Próximas consultas marcadas</h2>
+    <div class="scroll"><table><thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Médico</th><th>Motivo</th></tr></thead><tbody id="prox"></tbody></table></div>
+    <details><summary>SQL por trás desta tabela</summary><pre>SELECT c.data_consulta, c.hora_consulta, p.nome, m.nome, c.motivo
+FROM consulta c
+JOIN paciente p ON c.id_paciente = p.id_paciente
+JOIN medico m ON c.id_medico = m.id_medico
+WHERE c.estado = 'Marcada' AND c.data_consulta >= CURDATE()
+ORDER BY c.data_consulta, c.hora_consulta LIMIT 10;</pre></details></div>
+</section>
+</main>
+<script>
+var COR={Marcadas:"var(--amber)",Realizadas:"var(--teal)",Canceladas:"var(--coral)"};
+var f=document.getElementById("f"),medicosCarregados=false;
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function dm(s){var p=String(s).split("-");return p[2]+"/"+p[1]}
+function load(){
+  fetch("/api/stats?medico="+f.value).then(function(r){return r.json().then(function(j){if(!r.ok)throw j;return j})}).then(function(d){
+    document.getElementById("erro").innerHTML="";
+    if(!medicosCarregados){var sel=f.value;f.innerHTML='<option value="0">Todos os médicos</option>'+d.medicos.map(function(m){return '<option value="'+m.id+'">'+esc(m.nome)+'</option>'}).join("");f.value=sel;medicosCarregados=true}
+    var k=d.kpis,tx=k.total?Math.round(k.canceladas*100/k.total)+"%":"0%";
+    document.getElementById("kpis").innerHTML=[["Total",k.total],["Marcadas",k.marcadas],["Realizadas",k.realizadas],["Canceladas",k.canceladas],["Taxa de cancelamento",tx]].map(function(x){return '<div class="k"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>'}).join("");
+    var mx=Math.max(1,Math.max.apply(null,d.porEspecialidade.map(function(e){return e.total})));
+    document.getElementById("esp").innerHTML=d.porEspecialidade.map(function(e){return '<div class="row"><span>'+esc(e.nome)+'</span><div class="track"><div class="fill" style="width:'+e.total*100/mx+'%"></div></div><b>'+e.total+'</b></div>'}).join("");
+    var r=40,cc=2*Math.PI*r,off=0,svg='<svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="'+r+'" fill="none" stroke="var(--bg)" stroke-width="20"/>';
+    var est=[["Marcadas",k.marcadas],["Realizadas",k.realizadas],["Canceladas",k.canceladas]];
+    est.forEach(function(e){if(!k.total||!e[1])return;var len=cc*e[1]/k.total;svg+='<circle cx="60" cy="60" r="'+r+'" fill="none" stroke="'+COR[e[0]]+'" stroke-width="20" stroke-dasharray="'+len+' '+(cc-len)+'" stroke-dashoffset="'+(-off)+'" transform="rotate(-90 60 60)"/>';off+=len});
+    document.getElementById("est").innerHTML=svg+'</svg><div class="leg">'+est.map(function(e){return '<div><span class="dot" style="background:'+COR[e[0]]+'"></span>'+e[0]+': <b>'+e[1]+'</b></div>'}).join("")+'</div>';
+    var mxd=Math.max(1,Math.max.apply(null,d.porDia.map(function(x){return x.total})));
+    document.getElementById("dia").innerHTML=d.porDia.map(function(x){return '<div class="col"><em>'+x.total+'</em><i style="height:'+x.total*100/mxd*0.8+'%"></i><span>'+dm(x.dia)+'</span></div>'}).join("")||'<span class="live">Sem consultas.</span>';
+    document.getElementById("prox").innerHTML=d.proximas.map(function(c){return '<tr><td>'+dm(c.data)+'</td><td>'+esc(String(c.hora).slice(0,5))+'</td><td>'+esc(c.paciente)+'</td><td>'+esc(c.medico)+'</td><td>'+esc(c.motivo)+'</td></tr>'}).join("")||'<tr><td colspan="5">Sem consultas marcadas.</td></tr>';
+    document.getElementById("live").textContent="Base de dados: "+d.baseDeDados+" | atualizado às "+new Date(d.atualizadoEm).toLocaleTimeString("pt-PT");
+  }).catch(function(e){
+    document.getElementById("erro").innerHTML='<div class="err"><b>Não foi possível ler a base de dados.</b><br>'+esc(e&&e.mensagem||"Servidor indisponível")+'<br>Confirma a variável DATABASE_URL e se os scripts SQL já foram executados.</div>';
+  });
+}
+f.addEventListener("change",load);
+document.getElementById("r").addEventListener("click",load);
+load();setInterval(load,30000);
+</script>
+</body>
+</html>
